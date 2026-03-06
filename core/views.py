@@ -307,13 +307,20 @@ def vendor_product_list(request):
     products_list = Product.objects.all().order_by('-created_at')
     
     if query:
-        products_list = products_list.filter(
-            Q(name__icontains=query) | 
-            Q(id__icontains=query) |
-            Q(brand__icontains=query) |
-            Q(material__icontains=query) |
-            Q(origin__icontains=query) 
-        )
+        # === 核心修复 Bug 1: 清理并判断输入是否是数字 ===
+        clean_query = query.replace('#', '').strip()
+        
+        # 组装基础文本查询条件
+        q_objects = Q(name__icontains=clean_query) | \
+                    Q(brand__icontains=clean_query) | \
+                    Q(material__icontains=clean_query) | \
+                    Q(origin__icontains=clean_query)
+        
+        # 只有在输入全是数字时，才进行 ID 匹配，避免 ValueError
+        if clean_query.isdigit():
+            q_objects |= Q(id__icontains=clean_query)
+            
+        products_list = products_list.filter(q_objects)
     
     paginator = Paginator(products_list, 10) 
     page_number = request.GET.get('page')
