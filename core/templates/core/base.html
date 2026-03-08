@@ -48,6 +48,7 @@
                             <a href="{% url 'core:vendor_product_list' %}" class="btn btn-danger me-3 fw-bold shadow-sm">
                                 <i class="bi bi-speedometer2"></i> Vendor Portal
                             </a>
+                            <a href="{% url 'core:analytics_dashboard' %}" class="btn btn-outline-info me-2">📊 Analytics</a>
                         {% else %}
                             <!-- 顾客专属：My Orders 和 Cart -->
                             <a href="{% url 'core:order_list' %}" class="btn btn-outline-light me-2">

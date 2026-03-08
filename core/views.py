@@ -5,6 +5,8 @@ from django.db.models import Q
 from django.db import transaction
 from django.core.paginator import Paginator
 from django.http import JsonResponse
+from django.db.models import Sum, Q, F
+from django.db.models.functions import TruncDate
 import json
 
 from .models import Product, Category, Cart, CartItem, Order, OrderItem
@@ -439,3 +441,49 @@ def vendor_order_detail(request, pk):
         form = OrderStatusForm(instance=order)
         
     return render(request, 'vendor/order_detail.html', {'order': order, 'form': form})
+
+
+@login_required(login_url='core:login')
+def analytics_dashboard(request):
+    
+    if request.user.role != 'Admin' and not request.user.is_superuser:
+        return redirect('core:product_list')
+
+    products_stats = Product.objects.annotate(
+        total_sold=Sum('orderitem__quantity', filter=~Q(orderitem__order__status='Cancelled')),
+        refunded_qty=Sum('orderitem__quantity', filter=Q(orderitem__order__status='Refunded'))
+    ).filter(total_sold__gt=0).order_by('-total_sold')[:3]
+
+    top_products = []
+    for p in products_stats:
+        total = p.total_sold or 0
+        refunded = p.refunded_qty or 0
+        # 计算退货率
+        return_rate = (refunded / total * 100) if total > 0 else 0
+        top_products.append({
+            'name': p.name,
+            'total_sold': total,
+            'refunded_qty': refunded,
+            'return_rate': round(return_rate, 2)
+        })
+
+    sales_trend = Order.objects.filter(
+        ~Q(status='Cancelled')
+    ).annotate(
+        date=TruncDate('created_at')
+    ).values('date').annotate(
+        daily_revenue=Sum('total_amount'),
+        daily_items=Sum('items__quantity')
+    ).order_by('date')
+
+    dates = [item['date'].strftime('%Y-%m-%d') for item in sales_trend]
+    revenues = [float(item['daily_revenue']) for item in sales_trend]
+    volumes = [item['daily_items'] for item in sales_trend]
+
+    context = {
+        'top_products': top_products,
+        'dates_json': json.dumps(dates),
+        'revenues_json': json.dumps(revenues),
+        'volumes_json': json.dumps(volumes),
+    }
+    return render(request, 'core/analytics.html', context)
